@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Portfolio — Knowledge Graph</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0f12;
+    font-family: 'JetBrains Mono', monospace;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    color: #c9d1d9;
+  }
+
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: grab;
+  }
+  #canvas:active { cursor: grabbing; }
+
+  .ui-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  .top-bar {
+    position: absolute;
+    top: 20px; left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  .graph-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #7c8aaa;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .node-count {
+    font-size: 10px;
+    color: #3d4a5c;
+    letter-spacing: 0.1em;
+  }
+
+  .controls {
+    position: absolute;
+    bottom: 28px;
+    left: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: all;
+  }
+
+  .ctrl-btn {
+    width: 32px; height: 32px;
+    background: #151820;
+    border: 1px solid #1e2530;
+    border-radius: 6px;
+    color: #5a6a80;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .ctrl-btn:hover { background: #1a2030; color: #a0b0c8; border-color: #2a3545; }
+
+  .legend {
+    position: absolute;
+    bottom: 28px;
+    right: 28px;
+    background: #0f1218;
+    border: 1px solid #1a2030;
+    border-radius: 10px;
+    padding: 14px 16px;
+    pointer-events: none;
+  }
+
+  .legend-title {
+    font-size: 9px;
+    color: #3d4a5c;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 10px;
+    color: #5a6a80;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tooltip {
+    position: absolute;
+    background: #0f1218;
+    border: 1px solid #1e2a3a;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #8899aa;
+    max-width: 240px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .tooltip-desc { color: #5a6a80; font-size: 10px; line-height: 1.7; }
+
+  .search-bar {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    pointer-events: all;
+  }
+  .search-input {
+    background: #0f1218;
+    border: 1px solid #1e2530;
+    border-radius: 6px;
+    padding: 7px 12px;
+    color: #7a8a9a;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    width: 180px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input:focus { border-color: #3d5a8a; color: #c9d1d9; }
+  .search-input::placeholder { color: #2d3a4a; }
+
+  .hint {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: #1e2a35;
+    letter-spacing: 0.1em;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div class="top-bar">
+  <span class="graph-title">PM Portfolio — Knowledge Graph</span>
+  <span class="node-count" id="nodeCount"></span>
+</div>
+
+<div class="search-bar">
+  <input class="search-input" id="searchInput" type="text" placeholder="search nodes..." />
+</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="zoomIn" title="Zoom in">+</button>
+  <button class="ctrl-btn" id="zoomOut" title="Zoom out">−</button>
+  <button class="ctrl-btn" id="resetBtn" title="Reset view" style="font-size:12px;">⌂</button>
+</div>
+
+<div class="legend">
+  <div class="legend-title">Node types</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6e8efb;box-shadow:0 0 6px #6e8efb55;"></div>Portfolio root</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a78bfa;box-shadow:0 0 6px #a78bfa55;"></div>Projects</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34d399;box-shadow:0 0 6px #34d39955;"></div>Sections</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;box-shadow:0 0 6px #f59e0b55;"></div>Deliverables</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f472b6;box-shadow:0 0 6px #f472b655;"></div>Tools</div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="ttTitle"></div>
+  <div class="tooltip-desc" id="ttDesc"></div>
+</div>
+
+<div class="hint">scroll to zoom · drag to pan · hover nodes · drag nodes</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const COLORS = {
+  root:        { fill: '#6e8efb', glow: '#6e8efb', r: 22 },
+  project:     { fill: '#a78bfa', glow: '#a78bfa', r: 16 },
+  section:     { fill: '#34d399', glow: '#34d399', r: 11 },
+  deliverable: { fill: '#f59e0b', glow: '#f59e0b', r: 8  },
+  tool:        { fill: '#f472b6', glow: '#f472b6', r: 7  },
+};
+
+const SECTIONS = [
+  { id: 'overview',   label: 'Overview',              desc: 'Product summary, target user, your role, one-line insight' },
+  { id: 'discovery',  label: 'Discovery & Research',  desc: 'User interviews, surveys, competitive analysis, synthesis' },
+  { id: 'framing',    label: 'Problem Framing',        desc: 'Persona, journey map, HMW statements, ideation' },
+  { id: 'solution',   label: 'Solution Design',        desc: 'MoSCoW, user stories, PRD snippet, wireframes, user flow' },
+  { id: 'metrics',    label: 'Metrics & Validation',   desc: 'North Star, OKRs, AARRR funnel, A/B test hypothesis' },
+  { id: 'assets',     label: 'Case Study Assets',      desc: 'Affinity map, wireframes, Loom walkthrough, survey data' },
+  { id: 'learnings',  label: 'Learnings & Reflections',desc: '5 reflection questions, what I\'d do differently, next steps' },
+];
+
+const PROJECTS = [
+  { id:'ss', label:'SkillSwap',     color:'#c084fc', desc:'HR Tech · Internal peer-learning platform for large companies', week:'Weeks 1–2' },
+  { id:'fg', label:'FinGuard',      color:'#6ee7b7', desc:'Fintech · Subscription tracking and cancellation layer',        week:'Weeks 3–4' },
+  { id:'cf', label:'ClientFlow',    color:'#fda4af', desc:'B2B SaaS · Freelancer-client collaboration portal',             week:'Weeks 5–6' },
+  { id:'sh', label:'ShiftSync',     color:'#67e8f9', desc:'SMB Ops · Shift swap management for small businesses',          week:'Weeks 7–8' },
+  { id:'vs', label:'VolunteerSync', color:'#86efac', desc:'Social Impact · Non-profit volunteer coordination platform',    week:'Weeks 9–10' },
+];
+
+const DELIVERABLES = {
+  overview:   ['Product callout', 'Project snapshot table', 'One-line insight quote'],
+  discovery:  ['3–5 user interviews', 'Google Form survey', 'Affinity map (Miro)', 'Competitor table', 'Research synthesis'],
+  framing:    ['User persona', 'Journey map', 'HMW statements', 'Ideation output', 'Refined problem statement'],
+  solution:   ['MoSCoW table', 'User stories + ACs', 'PRD snapshot', 'Wireframes (Figma)', 'User flow diagram'],
+  metrics:    ['North Star metric', 'OKRs (90-day)', 'AARRR funnel', 'A/B test hypothesis'],
+  assets:     ['Interview notes', 'Survey screenshots', 'Wireframe images', 'Loom walkthrough video'],
+  learnings:  ['5 reflection answers', 'Hardest trade-off', 'Next steps block'],
+};
+
+const TOOLS = ['Figma', 'Miro', 'FigJam', 'Whimsical', 'Notion', 'Google Forms', 'Loom', 'Otter.ai'];
+
+// ── NODE CONSTRUCTION ──────────────────────────────────────────────────────────
+let nodes = [];
+let edges = [];
+let nid = 0;
+
+function mkNode(type, label, desc, x, y, extra = {}) {
+  const n = { id: nid++, type, label, desc, x, y, vx: 0, vy: 0, ...extra };
+  nodes.push(n);
+  return n;
+}
+
+function mkEdge(a, b, strength = 0.05, color = '#ffffff') {
+  edges.push({ a: a.id, b: b.id, strength, color });
+}
+
+// Root
+const root = mkNode('root', 'PM Portfolio', '5 projects · 7 sections each · 35 deliverables · 10 weeks', W/2, H/2);
+
+// Projects in a circle
+const projAngleStep = (2 * Math.PI) / PROJECTS.length;
+PROJECTS.forEach((p, i) => {
+  const angle = -Math.PI / 2 + i * projAngleStep;
+  const r = 200;
+  const pNode = mkNode('project', p.label, p.desc + '\n' + p.week, W/2 + Math.cos(angle)*r, H/2 + Math.sin(angle)*r, { projColor: p.color, projId: p.id });
+  mkEdge(root, pNode, 0.06, p.color);
+
+  // Sections per project
+  const secAngleStart = angle - 0.85;
+  const secAngleEnd   = angle + 0.85;
+  const secCount = SECTIONS.length;
+  SECTIONS.forEach((s, si) => {
+    const secAngle = secAngleStart + (si / (secCount - 1)) * (secAngleEnd - secAngleStart);
+    const secR = r + 110;
+    const sNode = mkNode('section', s.label, s.desc, W/2 + Math.cos(secAngle)*secR, H/2 + Math.sin(secAngle)*secR, { sectionId: s.id, parentProj: p.id });
+    mkEdge(pNode, sNode, 0.08, '#34d39944');
+
+    // Deliverables per section (only for first project to avoid clutter — toggled)
+    const delivs = DELIVERABLES[s.id] || [];
+    delivs.forEach((d, di) => {
+      const dAngle = secAngle - 0.35 + (di / Math.max(delivs.length - 1, 1)) * 0.7;
+      const dR = secR + 72;
+      const dNode = mkNode('deliverable', d, 'Deliverable: ' + d, W/2 + Math.cos(dAngle)*dR, H/2 + Math.sin(dAngle)*dR, { hidden: p.id !== 'ss', parentSection: s.id, parentProj: p.id });
+      mkEdge(sNode, dNode, 0.1, '#f59e0b22');
+    });
+  });
+});
+
+// Tools — floating cluster bottom right area
+const toolAngleBase = Math.PI * 0.15;
+TOOLS.forEach((t, i) => {
+  const a = toolAngleBase + i * (Math.PI * 0.12);
+  const tNode = mkNode('tool', t, 'Tool used across case studies', W/2 + Math.cos(a)*320, H/2 + Math.sin(a)*320, { toolLabel: t });
+  // Connect to root loosely
+  mkEdge(root, tNode, 0.015, '#f472b622');
+});
+
+// ── PHYSICS ───────────────────────────────────────────────────────────────────
+function getNode(id) { return nodes[id]; }
+
+function tick() {
+  const visNodes = nodes.filter(n => !n.hidden);
+
+  // Repulsion
+  for (let i = 0; i < visNodes.length; i++) {
+    for (let j = i + 1; j < visNodes.length; j++) {
+      const a = visNodes[i], b = visNodes[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist2 = dx*dx + dy*dy + 1;
+      const dist = Math.sqrt(dist2);
+      const minD = (COLORS[a.type]?.r || 10) + (COLORS[b.type]?.r || 10) + 40;
+      if (dist < minD * 3) {
+        const force = 0.8 * minD * minD / dist2;
+        const fx = (dx / dist) * force, fy = (dy / dist) * force;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+    }
+  }
+
+  // Spring edges
+  edges.forEach(e => {
+    const a = nodes[e.a], b = nodes[e.b];
+    if (a.hidden || b.hidden) return;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) + 0.001;
+    const targetLen = (COLORS[a.type]?.r || 10) + (COLORS[b.type]?.r || 10) + 60;
+    const force = (dist - targetLen) * e.strength;
+    const fx = (dx/dist)*force, fy = (dy/dist)*force;
+    if (!a.pinned) { a.vx += fx; a.vy += fy; }
+    if (!b.pinned) { b.vx -= fx; b.vy -= fy; }
+  });
+
+  // Center gravity
+  nodes.forEach(n => {
+    if (n.hidden || n.pinned) return;
+    n.vx += (W/2 - n.x) * 0.001;
+    n.vy += (H/2 - n.y) * 0.001;
+    n.vx *= 0.85;
+    n.vy *= 0.85;
+    n.x += n.vx;
+    n.y += n.vy;
+  });
+}
+
+// ── CAMERA ────────────────────────────────────────────────────────────────────
+let cam = { x: 0, y: 0, scale: 1 };
+let targetScale = 1;
+
+function toWorld(sx, sy) {
+  return { x: (sx - W/2) / cam.scale - cam.x + W/2, y: (sy - H/2) / cam.scale - cam.y + H/2 };
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // background grid dots
+  ctx.save();
+  ctx.fillStyle = '#151a22';
+  const gs = 30;
+  for (let x = 0; x < W; x += gs) for (let y = 0; y < H; y += gs) {
+    ctx.beginPath(); ctx.arc(x, y, 0.6, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(W/2 + cam.x, H/2 + cam.y);
+  ctx.scale(cam.scale, cam.scale);
+  ctx.translate(-W/2, -H/2);
+
+  // Edges
+  edges.forEach(e => {
+    const a = nodes[e.a], b = nodes[e.b];
+    if (a.hidden || b.hidden) return;
+    const highlight = hoveredNode && (hoveredNode.id === a.id || hoveredNode.id === b.id);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = highlight ? (e.color.replace(/[0-9a-f]{2}\)$/i, 'ff)')) : e.color;
+    ctx.lineWidth = highlight ? 1.5 : 0.6;
+    ctx.globalAlpha = highlight ? 0.9 : 0.35;
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    if (n.hidden) return;
+    const cfg = COLORS[n.type];
+    const r = cfg.r;
+    const hovered = hoveredNode && hoveredNode.id === n.id;
+    const searched = searchActive && n.label.toLowerCase().includes(searchTerm);
+    const fillColor = n.projColor || n.toolLabel ? (n.projColor || '#f472b6') : cfg.fill;
+
+    // glow
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r + (hovered ? 10 : searched ? 12 : 4), 0, Math.PI*2);
+    const glowR = r + (hovered ? 14 : searched ? 16 : 6);
+    const grd = ctx.createRadialGradient(n.x, n.y, r*0.3, n.x, n.y, glowR);
+    grd.addColorStop(0, fillColor + '55');
+    grd.addColorStop(1, fillColor + '00');
+    ctx.fillStyle = grd;
+    ctx.fill();
+    ctx.restore();
+
+    // node circle
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+    ctx.fillStyle = n.type === 'root' ? fillColor : '#0d0f12';
+    ctx.fill();
+    ctx.strokeStyle = searched ? '#fbbf24' : (hovered ? fillColor : fillColor + '99');
+    ctx.lineWidth = hovered ? 2.5 : searched ? 2.5 : 1.5;
+    ctx.stroke();
+    ctx.restore();
+
+    // inner dot for non-root
+    if (n.type !== 'root') {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r * 0.45, 0, Math.PI*2);
+      ctx.fillStyle = fillColor + 'bb';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // label
+    const showLabel = cam.scale > 0.5 || n.type === 'root' || n.type === 'project';
+    if (showLabel) {
+      ctx.save();
+      const fontSize = n.type === 'root' ? 12 : n.type === 'project' ? 10 : n.type === 'section' ? 9 : 8;
+      ctx.font = `${n.type === 'root' || n.type === 'project' ? '600' : '400'} ${fontSize}px 'Syne', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = hovered ? '#fff' : (n.type === 'root' ? '#e8eaf6' : n.type === 'project' ? '#d8d0ff' : '#8899aa');
+      const lines = n.label.split(' ');
+      if (lines.length > 2 && n.type !== 'root') {
+        ctx.fillText(lines.slice(0,2).join(' '), n.x, n.y + r + fontSize + 2);
+        ctx.fillText(lines.slice(2).join(' '), n.x, n.y + r + fontSize*2 + 2);
+      } else {
+        ctx.fillText(n.label, n.x, n.y + r + fontSize + 2);
+      }
+      ctx.restore();
+    }
+  });
+
+  ctx.restore();
+}
+
+// ── INTERACTION ───────────────────────────────────────────────────────────────
+let hoveredNode = null;
+let dragNode = null;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let camStart = { x: 0, y: 0 };
+let searchTerm = '';
+let searchActive = false;
+
+const tooltip = document.getElementById('tooltip');
+const ttTitle = document.getElementById('ttTitle');
+const ttDesc  = document.getElementById('ttDesc');
+
+function getNodeAt(wx, wy) {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (n.hidden) continue;
+    const r = COLORS[n.type]?.r || 10;
+    const dx = wx - n.x, dy = wy - n.y;
+    if (dx*dx + dy*dy < (r+4)*(r+4)) return n;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const w = toWorld(sx, sy);
+
+  if (dragNode) {
+    dragNode.x = w.x; dragNode.y = w.y;
+    dragNode.vx = 0; dragNode.vy = 0;
+    return;
+  }
+
+  if (isPanning) {
+    cam.x = camStart.x + (sx - panStart.x) / cam.scale;
+    cam.y = camStart.y + (sy - panStart.y) / cam.scale;
+    return;
+  }
+
+  const hit = getNodeAt(w.x, w.y);
+  hoveredNode = hit;
+  canvas.style.cursor = hit ? 'pointer' : 'grab';
+
+  if (hit) {
+    ttTitle.textContent = hit.label;
+    ttTitle.style.color = (hit.projColor || COLORS[hit.type]?.fill || '#fff');
+    ttDesc.textContent = hit.desc || '';
+    tooltip.style.left = (e.clientX + 16) + 'px';
+    tooltip.style.top  = (e.clientY - 10) + 'px';
+    tooltip.classList.add('show');
+  } else {
+    tooltip.classList.remove('show');
+  }
+});
+
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const w = toWorld(sx, sy);
+  const hit = getNodeAt(w.x, w.y);
+  if (hit) {
+    dragNode = hit;
+    dragNode.pinned = true;
+  } else {
+    isPanning = true;
+    panStart = { x: sx, y: sy };
+    camStart = { x: cam.x, y: cam.y };
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  if (dragNode) { dragNode.pinned = false; dragNode = null; }
+  isPanning = false;
+});
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const w = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const hit = getNodeAt(w.x, w.y);
+  if (hit && hit.type === 'project') {
+    // Toggle deliverables for this project
+    nodes.forEach(n => {
+      if (n.type === 'deliverable') {
+        if (n.parentProj === hit.projId) n.hidden = !n.hidden;
+      }
+    });
+  }
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = e.deltaY < 0 ? 1.12 : 0.89;
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const wx = (sx - W/2) / cam.scale - cam.x + W/2;
+  const wy = (sy - H/2) / cam.scale - cam.y + H/2;
+  cam.scale = Math.max(0.15, Math.min(4, cam.scale * delta));
+  cam.x = (wx - W/2) - (sx - W/2)/cam.scale;
+  cam.y = (wy - H/2) - (sy - H/2)/cam.scale;
+}, { passive: false });
+
+document.getElementById('zoomIn').addEventListener('click', () => { cam.scale = Math.min(4, cam.scale * 1.2); });
+document.getElementById('zoomOut').addEventListener('click', () => { cam.scale = Math.max(0.15, cam.scale * 0.83); });
+document.getElementById('resetBtn').addEventListener('click', () => { cam.x = 0; cam.y = 0; cam.scale = 1; });
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  searchTerm = e.target.value.toLowerCase().trim();
+  searchActive = searchTerm.length > 0;
+});
+
+// Touch support
+let lastTouchDist = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const w = toWorld(t.clientX - rect.left, t.clientY - rect.top);
+    const hit = getNodeAt(w.x, w.y);
+    if (hit) { dragNode = hit; dragNode.pinned = true; }
+    else { isPanning = true; panStart = { x: t.clientX, y: t.clientY }; camStart = { ...cam }; }
+  } else if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    lastTouchDist = Math.sqrt(dx*dx + dy*dy);
+  }
+}, { passive: true });
+
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const w = toWorld(t.clientX - rect.left, t.clientY - rect.top);
+    if (dragNode) { dragNode.x = w.x; dragNode.y = w.y; dragNode.vx = 0; dragNode.vy = 0; }
+    else if (isPanning) { cam.x = camStart.x + (t.clientX - panStart.x)/cam.scale; cam.y = camStart.y + (t.clientY - panStart.y)/cam.scale; }
+  } else if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    cam.scale = Math.max(0.15, Math.min(4, cam.scale * dist / lastTouchDist));
+    lastTouchDist = dist;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+  if (dragNode) { dragNode.pinned = false; dragNode = null; }
+  isPanning = false;
+});
+
+// ── NODE COUNT ────────────────────────────────────────────────────────────────
+document.getElementById('nodeCount').textContent = `${nodes.length} nodes · ${edges.length} connections`;
+
+// ── LOOP ──────────────────────────────────────────────────────────────────────
+function loop() {
+  for (let i = 0; i < 3; i++) tick();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
